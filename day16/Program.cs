@@ -5,45 +5,68 @@ var grid = Utils.ReadFile("real.txt");
 var startingPoint = grid.Single(x => x.Value == 'S');
 var endPoint = grid.Single(x => x.Value == 'E');
 
-Dictionary<Point, int> InitCosts()
+var costs = new Dictionary<(Point point, Direction direction), int>
 {
-    var result = new Dictionary<Point, int>();
-    foreach (var p in grid.Where(x => x.Value != '#'))
-    {
-        result.Add(p.Key, Int32.MaxValue);
-    }
-    
-    return result;
-}
+    [(startingPoint.Key, Direction.Right)] = 0
+};
+var predecessor2 = TraversePart2(costs);
+List<int> endPointCosts =
+[
+    costs[(endPoint.Key, Direction.Right)],
+    costs[(endPoint.Key, Direction.Up)],
+    costs[(endPoint.Key, Direction.Left)],
+    costs[(endPoint.Key, Direction.Down)],
+];
+Console.WriteLine($"Part1: {endPointCosts.Min()}");
+Process();
 
-var costs = InitCosts();
-costs[startingPoint.Key] = 0;
-var predecessor = Traverse(startingPoint.Key, costs);
-PrintPath(predecessor, endPoint.Key, grid);
-
-Console.WriteLine(costs[endPoint.Key]);
-
-Dictionary<Point, (Point, Direction)> Traverse(Point startingPoint, Dictionary<Point, int> cost)
+Dictionary<(Point point, Direction direction), HashSet<(Point, Direction)>> TraversePart2(Dictionary<(Point point, Direction direction), int> cost)
 {
-    var predecessor = new Dictionary<Point, (Point, Direction)>();
+    var predecessor = 
+        cost.Select(x => x.Key)
+        .ToDictionary(x => x, x => new HashSet<(Point, Direction)>());
     var pq = new PriorityQueue<(Point point, Direction direction), int>();
-    pq.Enqueue((startingPoint, Direction.Right), 0);
+    pq.Enqueue((startingPoint.Key, Direction.Right), 0);
     while (pq.Count > 0)
     {
         var current = pq.Dequeue();
-        foreach (var (neighbour, dir) in GetPointsAround(current.point).Where(x => cost.ContainsKey(x.Item1)))
+        var neighbours = GetPointsAround(current.point)
+            .Where(x => grid.ContainsKey(current.point))
+            .Where(x => grid[current.point] != '#')
+            .ToArray();
+        var possibleRotationsOfTheCurrentNode = neighbours
+            .Select(x => x.Item2)
+            .Where(x => x != current.direction)
+            .Select(x => (current.point, x))
+            .ToList();
+        var directNeighbour = neighbours.SingleOrDefault(x => x.Item2 == current.direction);
+        if (directNeighbour != default)
         {
-            var weight = 1;
-            if (dir != current.direction)
-            {
-                weight += 1000;
-            }
+            possibleRotationsOfTheCurrentNode.Add(directNeighbour);
+        }
+        
+        foreach (var (neighbour, dir) in possibleRotationsOfTheCurrentNode)
+        {
+            var weight = dir == current.direction ? 1 : 1000;
 
-            if (cost[current.point] != Int32.MaxValue && cost[current.point] + weight < cost[neighbour])
+            var newWeight = cost[current] + weight;
+            if (!cost.ContainsKey((neighbour, dir)))
             {
-                predecessor[neighbour] = (current.point, dir);
-                cost[neighbour] = cost[current.point] + weight;
-                pq.Enqueue((neighbour, dir), cost[neighbour]);
+                cost[(neighbour, dir)] = Int32.MaxValue;
+                predecessor[(neighbour, dir)] = new HashSet<(Point, Direction)>();
+            }
+            
+            if (newWeight < cost[(neighbour, dir)])
+            {
+                predecessor[(neighbour, dir)].Clear();
+                predecessor[(neighbour, dir)].Add(current);
+                cost[(neighbour, dir)] = newWeight;
+                pq.Enqueue((neighbour, dir), cost[(neighbour, dir)]);
+            }
+            else if (newWeight == cost[(neighbour, dir)])
+            {
+                predecessor[(neighbour, dir)].Add(current);
+                pq.Enqueue((neighbour, dir), cost[(neighbour, dir)]);
             }
         }
     }
@@ -51,33 +74,42 @@ Dictionary<Point, (Point, Direction)> Traverse(Point startingPoint, Dictionary<P
     return predecessor;
 }
 
-void PrintPath(Dictionary<Point, (Point, Direction)> predecessor, Point toPoint, Dictionary<Point, char> grid)
+void Process()
 {
-    var path = new Dictionary<Point, char>();
-    var current = toPoint;
-    while(predecessor.TryGetValue(current, out var prev))
+    var visitedSet = new HashSet<(Point, Direction)>();
+    Loop((endPoint.Key, Direction.Down));
+    Loop((endPoint.Key, Direction.Up));
+    Loop((endPoint.Key, Direction.Left));
+    Loop((endPoint.Key, Direction.Right));
+
+    void Loop((Point, Direction) current)
     {
-        var c = prev.Item2 switch
+        if (visitedSet.Contains(current))
         {
-            Direction.Right => '>',
-            Direction.Down => 'v',
-            Direction.Up => '^',
-            Direction.Left => '<',
-        };
-        path.Add(prev.Item1, c);
-        current = prev.Item1;
+            return;
+        }
+        
+        if (predecessor2.TryGetValue(current, out var next))
+        {
+            visitedSet.Add(current);
+            foreach (var n in next)
+            {
+                Loop(n);
+            }
+        }
     }
     
     var maxRow = grid.Keys.Max(x => x.Row);
     var maxCol = grid.Keys.Max(x => x.Col);
 
+    var uniqueVisited = visitedSet.Select(x => x.Item1).Distinct().ToHashSet();
     for (int i = 0; i <= maxRow; i++)
     {
         for (int j = 0; j <= maxCol; j++)
         {
-            if (path.ContainsKey(new Point(i, j)))
+            if (uniqueVisited.Contains(new Point(i, j)))
             {
-                Console.Write(path[new Point(i, j)]);
+                Console.Write("O");
             }
             else
             {
@@ -87,6 +119,8 @@ void PrintPath(Dictionary<Point, (Point, Direction)> predecessor, Point toPoint,
         
         Console.Write("\r\n");
     }
+    
+    Console.WriteLine($"Part2: {uniqueVisited.Count}");
 }
 
 IEnumerable<(Point, Direction)> GetPointsAround(Point point)
