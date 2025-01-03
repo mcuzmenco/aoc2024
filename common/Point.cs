@@ -46,4 +46,31 @@ public record struct Point(int Row, int Col)
     {
         return new Point(Row + 1, Col +1);
     }
+
+    public IEnumerable<Point> Adjacent(Predicate<Point> predicate)
+    {
+        var p = Top();
+        if (predicate(p))
+        {
+            yield return p;
+        }
+        
+        p = Left();
+        if (predicate(p))
+        {
+            yield return p;
+        }
+        
+        p = Right();
+        if (predicate(p))
+        {
+            yield return p;
+        }
+        
+        p = Bottom();
+        if (predicate(p))
+        {
+            yield return p;
+        }
+    }
 };
